@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>FeinSchnitt Hair Studio — Vorschau</title>
+<style>
+  :root{--cream:#FAF6F2;--ink:#151515;--green:#719067;--line:rgba(21,21,21,.14);
+        --muted:rgba(21,21,21,.42)}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100dvh;display:grid;place-items:center;background:var(--cream);
+       color:var(--ink);font:500 16px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;
+       padding:24px}
+  .g{width:100%;max-width:380px}
+  .k{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+     color:var(--muted);margin:0 0 .75rem}
+  h1{font-size:1.5rem;font-weight:800;letter-spacing:-.02em;margin:0 0 .4rem}
+  p.s{margin:0 0 1.6rem;color:var(--muted);font-size:14px}
+  label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;
+        letter-spacing:.08em;margin-bottom:.5rem}
+  input{width:100%;padding:.85rem 1rem;font:inherit;background:#fff;color:var(--ink);
+        border:1px solid var(--line);border-radius:.2rem}
+  input:focus{outline:2px solid var(--green);outline-offset:1px}
+  button{width:100%;margin-top:.75rem;padding:.9rem 1rem;font:inherit;font-weight:700;
+         background:var(--ink);color:#fff;border:0;border-radius:.2rem;cursor:pointer}
+  button[disabled]{opacity:.5;cursor:progress}
+  .e{margin-top:.9rem;font-size:13px;color:#A33;min-height:1.2em}
+  .n{margin-top:2rem;font-size:12px;color:var(--muted);line-height:1.5}
+</style>
+</head>
+<body>
+<main class="g">
+  <p class="k">FeinSchnitt Hair Studio</p>
+  <h1>Vorschau</h1>
+  <p class="s">Dieser Entwurf ist nicht öffentlich. Bitte das Passwort eingeben.</p>
+  <form id="f">
+    <label for="p">Passwort</label>
+    <input id="p" type="password" autocomplete="current-password" autofocus>
+    <button id="b" type="submit">Öffnen</button>
+    <p class="e" id="e" role="status" aria-live="polite"></p>
+  </form>
+  <p class="n">Website-Entwurf. Alle Bilder und Videos sind KI-erzeugt und zeigen
+     keine realen Personen.</p>
+</main>
+<script>
+/* Gate-Loader. An jeder echten URL liegt dieselbe Datei, nur d/datenschutz.dat wechselt —
+   dadurch funktioniert die normale Navigation zwischen den Unterseiten weiter.
+   Nach dem ersten richtigen Passwort liegt der Inhaltsschluessel (CEK) in
+   sessionStorage; Unterseiten entschluesseln stumm. Neuer Tab = neue Abfrage. */
+(function () {
+  var DAT = 'd/datenschutz.dat', KEYS = 'd/keys.json', SS = 'fs.cek';
+  var f = document.getElementById('f'), inp = document.getElementById('p'),
+      btn = document.getElementById('b'), err = document.getElementById('e');
+
+  function b64d(s) {
+    var raw = atob(s), a = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) a[i] = raw.charCodeAt(i);
+    return a;
+  }
+  function b64e(buf) {
+    var a = new Uint8Array(buf), s = '';
+    for (var i = 0; i < a.length; i++) s += String.fromCharCode(a[i]);
+    return btoa(s);
+  }
+  async function openWith(cek) {
+    var blob = b64d(await (await fetch(DAT, { cache: 'no-store' })).text());
+    var plain = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: blob.slice(0, 12) }, cek, blob.slice(12));
+    var html = new TextDecoder().decode(plain);
+    document.open(); document.write(html); document.close();
+  }
+  async function unwrap(pw) {
+    var entries = await (await fetch(KEYS, { cache: 'no-store' })).json();
+    var pwKey = await crypto.subtle.importKey(
+      'raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']);
+    for (var i = 0; i < entries.length; i++) {
+      var e = entries[i];
+      try {
+        var kek = await crypto.subtle.deriveKey(
+          { name: 'PBKDF2', salt: b64d(e.salt), iterations: e.it, hash: 'SHA-256' },
+          pwKey, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+        var raw = await crypto.subtle.decrypt(
+          { name: 'AES-GCM', iv: b64d(e.iv) }, kek, b64d(e.ct));
+        return await crypto.subtle.importKey(
+          'raw', raw, 'AES-GCM', true, ['decrypt']);
+      } catch (x) { /* naechster Eintrag */ }
+    }
+    return null;
+  }
+  /* Schluessel schon da? Dann gar nicht erst fragen. */
+  (async function () {
+    var s = null;
+    try { s = sessionStorage.getItem(SS); } catch (x) {}
+    if (!s) return;
+    try {
+      var cek = await crypto.subtle.importKey('raw', b64d(s), 'AES-GCM', true, ['decrypt']);
+      await openWith(cek);
+    } catch (x) { try { sessionStorage.removeItem(SS); } catch (y) {} }
+  })();
+
+  f.addEventListener('submit', async function (ev) {
+    ev.preventDefault();
+    err.textContent = ''; btn.disabled = true; btn.textContent = 'Einen Moment …';
+    try {
+      var cek = await unwrap(inp.value);
+      if (!cek) throw new Error('bad');
+      try {
+        sessionStorage.setItem(SS, b64e(await crypto.subtle.exportKey('raw', cek)));
+      } catch (x) {}
+      await openWith(cek);
+    } catch (x) {
+      err.textContent = 'Passwort stimmt nicht.';
+      btn.disabled = false; btn.textContent = 'Öffnen';
+      inp.select();
+    }
+  });
+})();
+</script>
+</body>
+</html>
